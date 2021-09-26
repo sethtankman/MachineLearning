@@ -190,14 +190,32 @@ if __name__ == '__main__':
     # print(S)
     # chooser can be Information Gain, Majority Error, or GINI
     # chooser="Information Gain"
-    depth = 6
-    InfoGainTree = ID3(S, Attributes, Labels, depth, "Information Gain")
-    METree = ID3(S, Attributes, Labels, depth, "Majority Error")
-    GINITree = ID3(S, Attributes, Labels, depth, "GINI")
-    FakeTree = ID3(S, Attributes, Labels, depth, "Fake")
-    # print(tree.printNodes("", 0))
-    TestTree(InfoGainTree, testData, "Information Gain")
-    TestTree(METree, testData, "Majority Error")
-    TestTree(GINITree, testData, "GINI")
-    TestTree(FakeTree, testData, "Fake")
+    depth = 1
+    print('TEST DATA')
+    while depth < 7:
+        InfoGainTree = ID3(S, Attributes, Labels, depth, "Information Gain")
+        METree = ID3(S, Attributes, Labels, depth, "Majority Error")
+        GINITree = ID3(S, Attributes, Labels, depth, "GINI")
+        # FakeTree = ID3(S, Attributes, Labels, depth, "Fake")
+        # print(tree.printNodes("", 0))
+        TestTree(InfoGainTree, testData, "Information Gain")
+        TestTree(METree, testData, "Majority Error")
+        TestTree(GINITree, testData, "GINI")
+        #TestTree(FakeTree, testData, "Fake")
+        depth += 1
+
+    depth = 1
+    print('TRAINING DATA')
+    while depth < 7:
+        print("Depth=", depth)
+        InfoGainTree = ID3(S, Attributes, Labels, depth, "Information Gain")
+        METree = ID3(S, Attributes, Labels, depth, "Majority Error")
+        GINITree = ID3(S, Attributes, Labels, depth, "GINI")
+        # FakeTree = ID3(S, Attributes, Labels, depth, "Fake")
+        # print(tree.printNodes("", 0))
+        TestTree(InfoGainTree, S, "Information Gain")
+        TestTree(METree, S, "Majority Error")
+        TestTree(GINITree, S, "GINI")
+        #TestTree(FakeTree, testData, "Fake")
+        depth += 1
 

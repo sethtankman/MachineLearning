@@ -1,5 +1,6 @@
 import math
 import pandas as pd
+import numpy as np
 
 class Node:
     def __init__(self, branches, label, atr):
@@ -11,6 +12,7 @@ class Node:
         finalString += str(self.label) + "\n"
         if len(self.branches.keys()) == 0:
             return finalString
+        finalString += "splitting on: " + self.attribute + "\n"
         for key in self.branches.keys():
             # print("#", key, "=", end= "")
             finalString += "#"*(numLevels+1) + key + "="
@@ -70,7 +72,7 @@ def GINI(S, Labels):
         gini -= frac * frac
     return gini
 
-def BestSplit(S, Attributes, Labels, chooser):
+def BestSplit(S, Attributes, Labels, chooser, weCareAboutUnknowns):
     gains = {}
     initEntropy = -1
     if chooser == "Information Gain":
@@ -81,10 +83,50 @@ def BestSplit(S, Attributes, Labels, chooser):
         initEntropy = GINI(S, Labels)
     allAttributes = len(Attributes)
     for attribute in Attributes.keys():
+        # print("Attribute: ", attribute)
         totalGains = initEntropy
-        for value in Attributes[attribute]:
-            atrSubset = Subset(S, attribute, value)
-            atrScale = len(atrSubset) / allAttributes
+        if Attributes[attribute][0] == 0:
+            for value in Attributes[attribute][1]:
+                if weCareAboutUnknowns and value == 'unknown':
+                    otherVals = Attributes[attribute][1].copy()
+                    #print("OTHER: ", otherVals)
+                    otherVals.remove(value)
+                    mostCommonAtrVal = ("", -1)
+                    for contestVal in otherVals:
+                        contestAtrNum = len(S.loc[S[attribute] == contestVal])
+                        if contestAtrNum > mostCommonAtrVal[1]:
+                            mostCommonAtrVal = (contestVal, contestAtrNum)
+                    value = mostCommonAtrVal[0]
+                atrSubset = Subset(S, attribute, value)
+                atrScale = len(atrSubset) / allAttributes
+                entr = -1
+                if chooser == "Information Gain":
+                    entr = Entropy(atrSubset, Labels)
+                elif chooser == "Majority Error":
+                    entr = MajError(atrSubset, Labels)
+                elif chooser == "GINI":
+                    entr = GINI(atrSubset, Labels)
+                totalGains -= (atrScale * entr)
+        else:
+            numericValues = S[attribute].tolist()
+            median = np.median(numericValues)
+            #print("numeric: ", numericValues, "\nMedian: ", median)
+            atrSubset = S.loc[S[attribute] > median]
+            #print(attribute, ": ", atrSubset)
+            atrScale = len(atrSubset) / len(S.index)
+            entr = -1
+            if chooser == "Information Gain":
+                entr = Entropy(atrSubset, Labels)
+            elif chooser == "Majority Error":
+                entr = MajError(atrSubset, Labels)
+            elif chooser == "GINI":
+                entr = GINI(atrSubset, Labels)
+            totalGains -= (atrScale * entr)
+
+            atrSubset = S.loc[S[attribute] <= median]
+
+            #print(attribute, ": ", atrSubset)
+            atrScale = 1 - atrScale
             entr = -1
             if chooser == "Information Gain":
                 entr = Entropy(atrSubset, Labels)
@@ -105,7 +147,7 @@ def BestSplit(S, Attributes, Labels, chooser):
 # S = The set of examples
 # Attributes = the set of measured attributes
 # Label = The target attribute (prediction)
-def ID3(S, Attributes, Labels, depth, chooser):
+def ID3(S, Attributes, Labels, depth, chooser, weCareAboutUnknowns):
     allLabels, mostCommonLabel = GetTheDeets(S)
     if len(list(allLabels.keys())) == 1:
         return Node({}, str(list(allLabels.keys())[0]), "")
@@ -113,19 +155,40 @@ def ID3(S, Attributes, Labels, depth, chooser):
         return Node({}, mostCommonLabel, "")
     rootNode = Node({}, "", "")
     # print("Attributes pre BestSplit: ", Attributes)
-    A = BestSplit(S, Attributes, Labels, chooser)
+    A = BestSplit(S, Attributes, Labels, chooser, weCareAboutUnknowns)
     rootNode.attribute = A
-    for value in Attributes[A]:
-        # Adding a branch is done implicitly
-        Sv = Subset(S, A, value)
+    if Attributes[A][0] == 0:
+        for value in Attributes[A][1]:
+            # Adding a branch is done implicitly
+            # print("A: ", A, "val: ", value)
+            Sv = Subset(S, A, value)
+            if len(Sv) == 0:
+                rootNode.branches[value] = Node({}, mostCommonLabel, "")
+            else:
+                newAtr = Attributes.copy()
+                # print("Attributes: ", Attributes)
+                # print("Removing: ", A)
+                newAtr.pop(A)
+                rootNode.branches[value] = ID3(Sv, newAtr, Labels, depth - 1, chooser, weCareAboutUnknowns)
+    else:
+        numericValues = S[A].tolist()
+        median = np.median(numericValues)
+        Sv = S.loc[S[A] > median]
         if len(Sv) == 0:
-            rootNode.branches[value] = Node({}, mostCommonLabel, "")
+            rootNode.branches[">"+str(median)] = Node({}, mostCommonLabel, "")
         else:
             newAtr = Attributes.copy()
             # print("Attributes: ", Attributes)
             # print("Removing: ", A)
             newAtr.pop(A)
-            rootNode.branches[value] = ID3(Sv, newAtr, Labels, depth - 1, chooser)
+            rootNode.branches[">"+str(median)] = ID3(Sv, newAtr, Labels, depth - 1, chooser, weCareAboutUnknowns)
+        Sv = S.loc[S[A] <= median]
+        if len(Sv) == 0:
+            rootNode.branches["<"+str(median)] = Node({}, mostCommonLabel, "")
+        else:
+            newAtr = Attributes.copy()
+            newAtr.pop(A)
+            rootNode.branches["<"+str(median)] = ID3(Sv, newAtr, Labels, depth - 1, chooser, weCareAboutUnknowns)
     return rootNode
 
 def TestTree(tree, testData, chooser):
@@ -134,7 +197,20 @@ def TestTree(tree, testData, chooser):
         currentNode = tree
         while currentNode.attribute != "":
             atrValue = row[currentNode.attribute]
-            currentNode = currentNode.branches[atrValue]
+            # print(currentNode.attribute)
+            # print(currentNode.branches)
+            for branch in currentNode.branches.keys():
+                if branch[0] == '>':
+                    if atrValue > int(branch[1:-2]):
+                        currentNode = currentNode.branches[branch]
+                elif branch[0] == '<':
+                    if atrValue <= int(branch[1:-2]):
+                        currentNode = currentNode.branches[branch]
+                else:
+                    # print(currentNode.branches)
+                    # print(atrValue)
+                    currentNode = currentNode.branches[atrValue]
+                    break
         prediction.append(currentNode.label)
     accurate =0
     index = 0
@@ -147,40 +223,17 @@ def TestTree(tree, testData, chooser):
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    labelText = ""
-    attrText = ""
-    colText = ""
-    with open("bank/data-desc.txt", 'r') as f:
-        res = []
-        line = f.readline()
-        while line:
-            if line[0] == '|':
-                line = f.readline()
-                total = ""
-                while line and line[0] != "|":
-                    total = total + line
-                    line = f.readline()
-                res.append((''.join(total.split())).split(','))
-            else:
-                line = f.readline()
-    print("Res: ", res)
-    Labels = res[0]
-    print(Labels)
-    Attributes = {}
-    currentKey = ""
-    for item in res[1]:
-        if '.' in item:
-            triplet = item.split('.')
-            Attributes[currentKey].add(triplet[0])
-            if triplet[1] != '':
-                item = triplet[1]
-            else:
-                continue
-        if ':' in item:
-            (currentKey, firstValue) = item.split(':')
-            Attributes[currentKey] = {firstValue}
-        else:
-            Attributes[currentKey].add(item)
+    Labels = ['yes', 'no']
+    #print(Labels)
+    # attrubute: (isNumeric, list)
+    Attributes = {'age': (1, []), 'job': (0, ["admin.","unknown","unemployed","management","housemaid","entrepreneur","student",
+                                    "blue-collar","self-employed","retired","technician","services"]),
+                  'marital': (0, ["married","divorced","single"]), 'education': (0, ["unknown","secondary","primary","tertiary"]),
+                  'default': (0, ["yes","no"]), 'balance': (1, []), 'housing': (0, ["yes","no"]), 'loan': (0, ["yes","no"]),
+                  'contact': (0, ["unknown","telephone","cellular"]), 'day': (1, []),
+                  'month': (0, ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]),
+                  'duration': (1, []), 'campaign': (1, []), 'pdays': (1, []), 'previous': (1, []),
+                  'poutcome': (0, ["unknown","other","failure","success"])}
     # print(Attributes)
     prefixes = list(Attributes.keys())
     prefixes.append('label')
@@ -190,13 +243,62 @@ if __name__ == '__main__':
     # print(S)
     # chooser can be Information Gain, Majority Error, or GINI
     # chooser="Information Gain"
-    depth = 6
-    InfoGainTree = ID3(S, Attributes, Labels, depth, "Information Gain")
-    METree = ID3(S, Attributes, Labels, depth, "Majority Error")
-    GINITree = ID3(S, Attributes, Labels, depth, "GINI")
-    FakeTree = ID3(S, Attributes, Labels, depth, "Fake")
-    # print(tree.printNodes("", 0))
-    TestTree(InfoGainTree, testData, "Information Gain")
-    TestTree(METree, testData, "Majority Error")
-    TestTree(GINITree, testData, "GINI")
-    TestTree(FakeTree, testData, "Fake")
+    depth = 1
+    print("TEST DATA - We care about unknowns")
+    while depth < 17:
+        print("DEPTH=", depth)
+        InfoGainTree = ID3(S, Attributes, Labels, depth, "Information Gain", True)
+        METree = ID3(S, Attributes, Labels, depth, "Majority Error", True)
+        GINITree = ID3(S, Attributes, Labels, depth, "GINI", True)
+        # FakeTree = ID3(S, Attributes, Labels, depth, "Fake")
+        #print(InfoGainTree.printNodes("", 0))
+        TestTree(InfoGainTree, testData, "Information Gain")
+        TestTree(METree, testData, "Majority Error")
+        TestTree(GINITree, testData, "GINI")
+        # TestTree(FakeTree, testData, "Fake")
+        depth += 1
+
+    depth = 1
+    print("TRAINING DATA - We care about unknowns")
+    while depth < 17:
+        print("DEPTH=", depth)
+        InfoGainTree = ID3(S, Attributes, Labels, depth, "Information Gain", True)
+        METree = ID3(S, Attributes, Labels, depth, "Majority Error", True)
+        GINITree = ID3(S, Attributes, Labels, depth, "GINI", True)
+        # FakeTree = ID3(S, Attributes, Labels, depth, "Fake")
+        # print(InfoGainTree.printNodes("", 0))
+        TestTree(InfoGainTree, S, "Information Gain")
+        TestTree(METree, S, "Majority Error")
+        TestTree(GINITree, S, "GINI")
+        # TestTree(FakeTree, testData, "Fake")
+        depth += 1
+
+    depth = 1
+    print("TRAINING DATA - We DON'T care about unknowns")
+    while depth < 17:
+        print("DEPTH=", depth)
+        InfoGainTree = ID3(S, Attributes, Labels, depth, "Information Gain", False)
+        METree = ID3(S, Attributes, Labels, depth, "Majority Error", False)
+        GINITree = ID3(S, Attributes, Labels, depth, "GINI", False)
+        # FakeTree = ID3(S, Attributes, Labels, depth, "Fake")
+        # print(InfoGainTree.printNodes("", 0))
+        TestTree(InfoGainTree, S, "Information Gain")
+        TestTree(METree, S, "Majority Error")
+        TestTree(GINITree, S, "GINI")
+        # TestTree(FakeTree, testData, "Fake")
+        depth += 1
+
+    depth = 1
+    print("TEST DATA - We DON'T care about unknowns")
+    while depth < 17:
+        print("DEPTH=", depth)
+        InfoGainTree = ID3(S, Attributes, Labels, depth, "Information Gain", False)
+        METree = ID3(S, Attributes, Labels, depth, "Majority Error", False)
+        GINITree = ID3(S, Attributes, Labels, depth, "GINI", False)
+        # FakeTree = ID3(S, Attributes, Labels, depth, "Fake")
+        # print(InfoGainTree.printNodes("", 0))
+        TestTree(InfoGainTree, testData, "Information Gain")
+        TestTree(METree, testData, "Majority Error")
+        TestTree(GINITree, testData, "GINI")
+        # TestTree(FakeTree, testData, "Fake")
+        depth += 1
