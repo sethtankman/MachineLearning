@@ -1,3 +1,3 @@
 #!/bin/sh
-python BatchGradientDescent.py
-python Stochastic.py
+python3 BatchGradientDescent.py
+python3 Stochastic.py

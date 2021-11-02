@@ -200,13 +200,12 @@ def TestTree(tree, testData, chooser):
             # print(currentNode.attribute)
             # print(currentNode.branches)
             for branch in currentNode.branches.keys():
-                if branch[0] == '>':
-                    if atrValue > int(branch[1:-2]):
+                if branch[0] == '>' and atrValue > int(branch[1:-2]):
                         currentNode = currentNode.branches[branch]
-                elif branch[0] == '<':
-                    if atrValue <= int(branch[1:-2]):
+                elif branch[0] == '<' and atrValue <= int(branch[1:-2]):
                         currentNode = currentNode.branches[branch]
-                else:
+                        break
+                elif branch == atrValue:
                     # print(currentNode.branches)
                     # print(atrValue)
                     currentNode = currentNode.branches[atrValue]
