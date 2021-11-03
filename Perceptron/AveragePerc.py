@@ -4,30 +4,29 @@ import numpy as np
 import random
 
 # Returns a weight vector
-def Perceptron(S, T, r):
+def AveragedPerceptron(S, T, r):
     #Initialize Weights
     weightVector = [0 for i in range(5)]
+    a = [0 for i in range(5)]
     for t in range(T):
-        #Shuffle the data
-        randomIndexes = random.choices(population=S.index.tolist(), k=len(S.index))
-        mPrime = S.iloc[randomIndexes]
         # For each example
-        for index, row in mPrime.iterrows():
+        for index, row in S.iterrows():
             y_i = row['label']
             x_i = row[0:-1].values
             if y_i*np.dot(weightVector,x_i) <= 0:
                 weightVector = weightVector + r*y_i*x_i
+            a = a + weightVector
 
-    return weightVector
+    return a
 
 # Returns an average prediction error
-def GetAvgPredictError(weightVector, TestData):
+def GetAvgPredictError(a, TestData):
     numExamples = len(TestData.index)
     error = 0
     for index, row in TestData.iterrows():
         y_i = row['label']
         x_i = row[0:-1].values
-        if np.sign(np.dot(weightVector,x_i)) != y_i:
+        if np.sign(np.dot(a,x_i)) != y_i:
             error +=1
     return error/numExamples
 
@@ -47,9 +46,9 @@ if __name__ == '__main__':
     r=0.01
     print("Learning Rate: ", r)
 
-    weightVector = Perceptron(S, T, r)
-    avgPredictError = GetAvgPredictError(weightVector, testData)
-    print("Weight Vector: ", weightVector)
+    a = AveragedPerceptron(S, T, r)
+    avgPredictError = GetAvgPredictError(a, testData)
+    print("A: ", a)
     print("Average Prediction Error: ", avgPredictError)
 
     toc = time.perf_counter()
